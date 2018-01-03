@@ -1,12 +1,16 @@
 import ccxt
-import logging
+import csv
 import time
+import datetime
 
-logging.basicConfig(
-    filename='data_gather.log',
-    level=logging.INFO,
-    format='%(asctime)s:%(levelname)s:%(message)s'
-)
+filename = 'data-{}.csv'.format(datetime.date.today())
+sleeptime = 30
+
+with open(filename, 'a', newline='') as csvfile:
+    fieldnames = ['exchange', 'timestamp', 'symbol', 'bid', 'ask', 'last']
+    writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    writer.writeheader()
+
 
 exchanges = [
     'binance',
@@ -21,6 +25,7 @@ exchanges = [
     'huobipro',
     'poloniex',
     'quadrigacx',
+    'kraken',
 ]
 # 'kraken'
 
@@ -62,19 +67,24 @@ symbols = [
 
 def get_ticker(exchange, symbol):
     ticker = exchange.fetch_ticker(symbol)
-    result = {
-        'exchange': exchange.id,
-        'symbol': symbol,
-        'datetime': ticker['datetime'],
-        'bid': ticker['bid'],
-        'ask': ticker['ask'],
-        'last': ticker['last'],
-    }
+
+    result = {}
+    result['exchange'] = exchange.name
+    result['symbol'] = symbol
+    result['timestamp'] = int(ticker['timestamp'])
+
+    if exchange.id == 'huobipro':
+        result['bid'] = ticker['info']['bid'][0]
+        result['ask'] = ticker['info']['ask'][0]
+        result['last'] = 0
+    else:
+        result['bid'] = ticker['bid']
+        result['ask'] = ticker['ask']
+        result['last'] = ticker['last']
 
     return result
 
 
-# print(temp)
 exchange_objects = []
 for ex in exchanges:
     ex = getattr(ccxt, ex)()
@@ -85,12 +95,22 @@ for ex in exchanges:
 
 while True:
     for symbol in symbols:
-        for exchange in exchange_objects:
-            if symbol in exchange.symbols:
-                ticker = get_ticker(exchange, symbol)
-                print(ticker)
-                logging.info(ticker)
+        with open(filename, 'a', newline='') as csvfile:
 
-    print('sleeping')
-    time.sleep(30)
+            for exchange in exchange_objects:
+                if symbol in exchange.symbols:
+                    try:
+                        ticker = get_ticker(exchange, symbol)
 
+                        fieldnames = ['exchange', 'timestamp', 'symbol', 'bid', 'ask', 'last']
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writerow(ticker)
+
+                        print(ticker)
+
+                    except Exception as e:
+                        print(e)
+                    # logging.info(ticker)
+
+        print('sleeping')
+        time.sleep(30)
